@@ -1,0 +1,70 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: gateway,health,info
+server:
+  port: 9000
+  netty:
+    connection-timeout: 2s
+    idle-timeout: 15s
+  shutdown: graceful
+spring:
+  application:
+    name: edge-service
+  lifecycle:
+    timeout-per-shutdown-phase: 15s
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - name: Retry
+              args:
+                retires: 3
+                methods: GET
+                series: SERVER_ERROR
+                exceptions: java.io.IOException, java.util.concurrent.TimeoutException
+                backoff:
+                  firstBackoff: 50ms
+                  maxBackoff: 500ms
+                  factor: 2
+                  basedOnPreviousValue: false
+          httpclient:
+            connection-timeout: 2000
+            response-timeout: 5s
+            pool:
+              type: elastic
+              max-idle-time: 15s
+              max-life-time: 60s
+          routes:
+            - id: catalog-route
+              uri: ${CATALOG_SERVICE_URL:http://localhost:8080}
+              predicates:
+                - Path=/books/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCircuitBreaker
+                    fallbackUri: forward:/catalog-fallback
+            - id: order-route
+              uri: ${ORDER_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: orderCircuitBreaker
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 20
+        permittedNumberOfCallsInHalfOpenState: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 15000
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 5s
+
