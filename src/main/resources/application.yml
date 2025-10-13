@@ -14,11 +14,23 @@ spring:
     name: edge-service
   lifecycle:
     timeout-per-shutdown-phase: 15s
+  data:
+    redis:
+      connect-timeout: 2s
+      host: localhost
+      port: 6379
+      timeout: 1s
+  session:
+    store-type: redis
+    timeout: 10m
+    redis:
+      namespace: polar:edge
   cloud:
     gateway:
       server:
         webflux:
           default-filters:
+            - SaveSession
             - name: Retry
               args:
                 retires: 3
@@ -30,6 +42,12 @@ spring:
                   maxBackoff: 500ms
                   factor: 2
                   basedOnPreviousValue: false
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter:
+                  replenishRate: 10
+                  burstCapacity: 20
+                  requestedTokens: 1
           httpclient:
             connection-timeout: 2000
             response-timeout: 5s
@@ -67,4 +85,9 @@ resilience4j:
     configs:
       default:
         timeoutDuration: 5s
+
+
+logging:
+  level:
+    io.github.resilience4j: DEBUG
 
